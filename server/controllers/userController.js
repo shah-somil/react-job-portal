@@ -12,10 +12,12 @@ const emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
 
 exports.createUser = async (req, res) => {
   try {
-    const { fullName, email, password } = req.body;
-
+    const { fullName, email, password, role } = req.body;
+    if (!['admin', 'employee'].includes(role)) {
+        return res.status(400).send('Invalid user type.');
+    }
     // Validate input
-    if (!fullName || !email || !password) {
+    if (!fullName || !email || !password || !role) {
         return res.status(400).send({ message: 'Please provide all required fields' });
     }
 
@@ -41,7 +43,7 @@ exports.createUser = async (req, res) => {
     }
 
     // Create new user
-    const user = new User({ fullName, email, password });
+    const user = new User({ fullName, email, password, role });
     await user.save();
 
     res.status(201).send({ message: 'User created successfully', user });
@@ -115,7 +117,8 @@ exports.deleteUser = async (req, res) => {
 
 exports.getAll = async (req, res) => {
   try {
-        const users = await User.find({}, 'fullName email password');
+    // const users = await User.find().select('-password');
+        const users = await User.find({}, 'fullName email role');
         res.status(200).send({ message: 'Users retrieved successfully', users });
     } catch (error) {
         res.status(500).send({ message: 'Error retrieving users', error: error.message });
@@ -162,25 +165,57 @@ exports.uploadImage = async (req, res) => {
   }
 };
 
+// exports.LoginUser = async (req, res) => {
+//     try{
+//         const {email, password} = req.body;
+
+//         const user = await User.findOne({email});
+//         if(!user){
+//             return res.status(401).json({message: 'Invalid email or password'});
+//         }
+
+//         const checkPassword = await bcrypt.compare(password, user.password);
+//         if (!checkPassword){
+//             return res.status(401).json({message: 'Invalid email or password'});
+
+//         }
+
+//         const token = jwt.sign({userId: user._id, email: user.email}, 'secret_key', {expiresIn: '1h'});
+//         res.status(200).json({token});
+//     }catch(e){
+//         console.error('Error logging in user:', error);
+//         res.status(500).json({message: 'Internal server error'});
+//     }
+// };
+
+
 exports.LoginUser = async (req, res) => {
-    try{
-        const {email, password} = req.body;
+    try {
+        const { email, password } = req.body;
 
-        const user = await User.findOne({email});
-        if(!user){
-            return res.status(401).json({message: 'Invalid email or password'});
+        // Find the user by email
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(401).json({ message: 'Invalid email or password' });
         }
 
+        // Check the password
         const checkPassword = await bcrypt.compare(password, user.password);
-        if (!checkPassword){
-            return res.status(401).json({message: 'Invalid email or password'});
-
+        if (!checkPassword) {
+            return res.status(401).json({ message: 'Invalid email or password' });
         }
 
-        const token = jwt.sign({userId: user._id, email: user.email}, 'secret_key', {expiresIn: '1h'});
-        res.status(200).json({token});
-    }catch(e){
+        // Assuming 'type' field exists in user model that denotes role
+        const token = jwt.sign(
+            { userId: user._id, email: user.email, role: user.role },
+            'secret_key',
+            { expiresIn: '1h' }
+        );
+
+        // Send back the token and the user type
+        res.status(200).json({ token, role: user.role });  // Ensure your front-end knows to expect a 'role' field now
+    } catch (error) {
         console.error('Error logging in user:', error);
-        res.status(500).json({message: 'Internal server error'});
+        res.status(500).json({ message: 'Internal server error' });
     }
 };
